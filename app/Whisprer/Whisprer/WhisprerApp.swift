@@ -9,9 +9,14 @@ import SwiftUI
 
 @main
 struct WhisprerApp: App {
+    @StateObject private var coordinator = AppCoordinator()
+
     var body: some Scene {
-        WindowGroup {
-            ContentView()
+        MenuBarExtra {
+            MenuBarContentView(coordinator: coordinator)
+        } label: {
+            Label("Whisprer", systemImage: coordinator.state.menuBarIcon)
         }
+        .menuBarExtraStyle(.window)
     }
 }

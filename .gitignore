@@ -12,7 +12,7 @@ xcuserdata/
 *.xcworkspace/xcuserdata/
 
 ## Build artifacts
-DerivedData/
+.deriveddata/
 
 ## Obj-C / Swift
 *.hmap
