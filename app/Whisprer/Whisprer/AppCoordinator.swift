@@ -73,18 +73,11 @@ final class AppCoordinator: ObservableObject {
             return
         }
 
-        guard permissions.accessibilityGranted else {
-            permissionManager.promptForAccessibilityAccess()
-            state = .error("Accessibility permission is required for the global hotkey and paste automation.")
-            refreshPermissions()
-            return
-        }
-
-        let microphoneGranted = await permissionManager.requestMicrophoneAccess()
-        refreshPermissions()
-
-        guard microphoneGranted else {
-            state = .error("Microphone permission is required to record audio.")
+        switch await preparePermissionsForRecording() {
+        case .ready:
+            break
+        case let .blocked(message):
+            state = .error(message)
             return
         }
 
@@ -93,6 +86,45 @@ final class AppCoordinator: ObservableObject {
             state = .recording
         } catch {
             state = .error(error.localizedDescription)
+        }
+    }
+
+    private func preparePermissionsForRecording() async -> PermissionPreparationResult {
+        let initialPermissions = permissions
+        let requestedAccessibility = !initialPermissions.accessibilityGranted
+        let requestedMicrophone = !initialPermissions.microphoneGranted
+
+        if requestedAccessibility {
+            permissionManager.promptForAccessibilityAccess()
+        }
+
+        if requestedMicrophone {
+            _ = await permissionManager.requestMicrophoneAccess()
+        }
+
+        refreshPermissions()
+
+        guard permissions.readyForEndToEndFlow else {
+            return .blocked(permissionGuidanceMessage())
+        }
+
+        if requestedAccessibility || requestedMicrophone {
+            return .blocked("Permissions updated. Press Right Option again to start dictation.")
+        }
+
+        return .ready
+    }
+
+    private func permissionGuidanceMessage() -> String {
+        switch (permissions.accessibilityGranted, permissions.microphoneGranted) {
+        case (false, false):
+            return "Grant accessibility and microphone permissions, then press Right Option again."
+        case (false, true):
+            return "Grant accessibility permission, then press Right Option again."
+        case (true, false):
+            return "Grant microphone permission, then press Right Option again."
+        case (true, true):
+            return "Permissions updated. Press Right Option again to start dictation."
         }
     }
 
@@ -121,4 +153,9 @@ final class AppCoordinator: ObservableObject {
             state = .error(error.localizedDescription)
         }
     }
+}
+
+private enum PermissionPreparationResult {
+    case ready
+    case blocked(String)
 }
