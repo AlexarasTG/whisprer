@@ -1,0 +1,36 @@
+name: Build
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Build Whisprer
+        run: |
+          xcodebuild \
+            -project app/Whisprer/Whisprer.xcodeproj \
+            -scheme Whisprer \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath .deriveddata \
+            CODE_SIGNING_ALLOWED=NO \
+            build
