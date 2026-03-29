@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import OSLog
 
 @MainActor
 final class AppCoordinator: ObservableObject {
@@ -12,9 +13,11 @@ final class AppCoordinator: ObservableObject {
     private let transcriptionEngine: TranscriptionEngine = WhisperCLIEngine()
     private let textInsertionService = TextInsertionService()
     private let hotkeyManager = RightOptionHotkeyManager()
+    private let logger = Logger(subsystem: "com.alexarasTG.Whisprer", category: "AppCoordinator")
 
     init() {
         permissions = permissionManager.snapshot()
+        logger.debug("Initialized with permissions: \(Self.describe(permissions: self.permissions), privacy: .public)")
         hotkeyManager.onPressed = { [weak self] in
             self?.handleHotkeyPressed()
         }
@@ -25,47 +28,55 @@ final class AppCoordinator: ObservableObject {
     }
 
     func requestPermissions() {
+        logger.debug("Manual permission request triggered")
         permissionManager.promptForAccessibilityAccess()
 
         Task {
             _ = await permissionManager.requestMicrophoneAccess()
             await MainActor.run {
                 self.refreshPermissions()
+                self.logger.debug("Permissions after manual request: \(Self.describe(permissions: self.permissions), privacy: .public)")
             }
         }
     }
 
     func clearError() {
         if case .error = state {
-            state = .idle
+            setState(.idle)
         }
     }
 
     func refreshPermissions() {
         permissions = permissionManager.snapshot()
+        logger.debug("Permission snapshot refreshed: \(Self.describe(permissions: self.permissions), privacy: .public)")
     }
 
     private func handleHotkeyPressed() {
+        logger.debug("Hotkey pressed while state=\(Self.describe(state: self.state), privacy: .public)")
         Task {
             await startRecordingIfPossible()
         }
     }
 
     private func handleHotkeyReleased() {
+        logger.debug("Hotkey released while state=\(Self.describe(state: self.state), privacy: .public)")
         Task {
             await stopRecordingIfNeeded()
         }
     }
 
     private func startRecordingIfPossible() async {
+        logger.debug("Starting recording attempt")
         refreshPermissions()
 
         if case .recording = state {
+            logger.debug("Ignoring hotkey press because recording is already active")
             return
         }
 
         switch state {
         case .transcribing, .inserting:
+            logger.debug("Ignoring hotkey press because state=\(Self.describe(state: self.state), privacy: .public)")
             return
         case .idle, .error:
             break
@@ -75,17 +86,20 @@ final class AppCoordinator: ObservableObject {
 
         switch await preparePermissionsForRecording() {
         case .ready:
+            logger.debug("Permissions ready for recording")
             break
         case let .blocked(message):
-            state = .error(message)
+            logger.debug("Recording blocked by permissions: \(message, privacy: .public)")
+            setState(.error(message))
             return
         }
 
         do {
             try recorder.startRecording()
-            state = .recording
+            setState(.recording)
         } catch {
-            state = .error(error.localizedDescription)
+            logger.error("Failed to start recording: \(error.localizedDescription, privacy: .public)")
+            setState(.error(error.localizedDescription))
         }
     }
 
@@ -94,21 +108,29 @@ final class AppCoordinator: ObservableObject {
         let requestedAccessibility = !initialPermissions.accessibilityGranted
         let requestedMicrophone = !initialPermissions.microphoneGranted
 
+        logger.debug(
+            "Preparing permissions. Current snapshot: \(Self.describe(permissions: initialPermissions), privacy: .public)"
+        )
+
         if requestedAccessibility {
+            logger.debug("Requesting accessibility permission")
             permissionManager.promptForAccessibilityAccess()
         }
 
         if requestedMicrophone {
+            logger.debug("Requesting microphone permission")
             _ = await permissionManager.requestMicrophoneAccess()
         }
 
         refreshPermissions()
 
         guard permissions.readyForEndToEndFlow else {
+            logger.debug("Permissions still incomplete after request: \(Self.describe(permissions: self.permissions), privacy: .public)")
             return .blocked(permissionGuidanceMessage())
         }
 
         if requestedAccessibility || requestedMicrophone {
+            logger.debug("Permissions changed during this attempt; requiring a fresh hotkey press")
             return .blocked("Permissions updated. Press Right Option again to start dictation.")
         }
 
@@ -130,27 +152,60 @@ final class AppCoordinator: ObservableObject {
 
     private func stopRecordingIfNeeded() async {
         guard case .recording = state else {
+            logger.debug("Ignoring hotkey release because no recording is active")
             return
         }
 
-        state = .transcribing
+        logger.debug("Stopping recording and starting transcription")
+        setState(.transcribing)
 
         do {
             let audioFileURL = try await recorder.stopRecording()
+            logger.debug("Recorder returned audio file: \(audioFileURL.path, privacy: .public)")
+            logger.debug("Invoking transcription engine")
             let transcript = try await transcriptionEngine.transcribe(audioFileURL: audioFileURL)
             let trimmedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+            logger.debug("Transcription completed. Character count=\(trimmedTranscript.count)")
 
             guard !trimmedTranscript.isEmpty else {
-                state = .error("No speech was detected in the recording.")
+                logger.error("Transcript was empty after trimming")
+                setState(.error("No speech was detected in the recording."))
                 return
             }
 
             lastTranscript = trimmedTranscript
-            state = .inserting
+            logger.debug("Starting text insertion")
+            setState(.inserting)
             try await textInsertionService.insert(text: trimmedTranscript)
-            state = .idle
+            logger.debug("Text insertion completed")
+            setState(.idle)
         } catch {
-            state = .error(error.localizedDescription)
+            logger.error("End-to-end flow failed: \(error.localizedDescription, privacy: .public)")
+            setState(.error(error.localizedDescription))
+        }
+    }
+
+    private func setState(_ newState: AppState) {
+        logger.debug("State transition: \(Self.describe(state: self.state), privacy: .public) -> \(Self.describe(state: newState), privacy: .public)")
+        state = newState
+    }
+
+    private static func describe(permissions: PermissionSnapshot) -> String {
+        "microphone=\(permissions.microphoneGranted), accessibility=\(permissions.accessibilityGranted)"
+    }
+
+    private static func describe(state: AppState) -> String {
+        switch state {
+        case .idle:
+            return "idle"
+        case .recording:
+            return "recording"
+        case .transcribing:
+            return "transcribing"
+        case .inserting:
+            return "inserting"
+        case let .error(message):
+            return "error(\(message))"
         }
     }
 }
