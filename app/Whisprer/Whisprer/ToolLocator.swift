@@ -1,6 +1,9 @@
 import Foundation
+import OSLog
 
 enum ToolLocator {
+    private nonisolated static let logger = Logger(subsystem: "com.alexarasTG.Whisprer", category: "ToolLocator")
+
     nonisolated static func whisperCLIURL() throws -> URL {
         try locate(relativePath: "tools/whisper-cli", missingMessage: "Unable to find ./tools/whisper-cli.")
     }
@@ -10,13 +13,19 @@ enum ToolLocator {
     }
 
     private nonisolated static func locate(relativePath: String, missingMessage: String) throws -> URL {
-        for baseURL in candidateBaseURLs() {
+        let baseURLs = candidateBaseURLs()
+        logger.debug("Locating \(relativePath, privacy: .public) from \(baseURLs.count) candidate roots")
+
+        for baseURL in baseURLs {
             let candidate = baseURL.appendingPathComponent(relativePath)
+            logger.debug("Trying candidate \(candidate.path, privacy: .public)")
             if FileManager.default.isReadableFile(atPath: candidate.path) {
+                logger.debug("Resolved \(relativePath, privacy: .public) to \(candidate.path, privacy: .public)")
                 return candidate
             }
         }
 
+        logger.error("Failed to resolve \(relativePath, privacy: .public)")
         throw ToolLocatorError.missingDependency(missingMessage)
     }
 
@@ -24,13 +33,18 @@ enum ToolLocator {
         var urls: [URL] = []
         let fileManager = FileManager.default
 
-        urls.append(contentsOf: ancestorURLs(for: URL(fileURLWithPath: fileManager.currentDirectoryPath, isDirectory: true)))
+        let currentDirectoryURL = URL(fileURLWithPath: fileManager.currentDirectoryPath, isDirectory: true)
+        logger.debug("Current directory root: \(currentDirectoryURL.path, privacy: .public)")
+        urls.append(contentsOf: ancestorURLs(for: currentDirectoryURL))
 
         if let pwd = ProcessInfo.processInfo.environment["PWD"] {
-            urls.append(contentsOf: ancestorURLs(for: URL(fileURLWithPath: pwd, isDirectory: true)))
+            let pwdURL = URL(fileURLWithPath: pwd, isDirectory: true)
+            logger.debug("PWD root: \(pwdURL.path, privacy: .public)")
+            urls.append(contentsOf: ancestorURLs(for: pwdURL))
         }
 
         if let resourceURL = Bundle.main.resourceURL {
+            logger.debug("Bundle resource root: \(resourceURL.path, privacy: .public)")
             urls.append(contentsOf: ancestorURLs(for: resourceURL))
         }
 
