@@ -59,3 +59,4 @@ fastlane/test_output
 # -----------------------------------------------------------------------------
 models/
 tools/whisper-cli
+project-whisprer.md
