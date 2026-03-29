@@ -9,9 +9,15 @@ struct WhisperCLIEngine: TranscriptionEngine {
     private nonisolated static let logger = Logger(subsystem: "com.alexarasTG.Whisprer", category: "WhisperCLIEngine")
 
     func transcribe(audioFileURL: URL) async throws -> String {
-        try await Task.detached(priority: .userInitiated) {
+        Self.logger.debug("Preparing detached transcription task for file \(audioFileURL.path, privacy: .public)")
+        return try await Task.detached(priority: .userInitiated) {
+            Self.logger.debug("Entered detached transcription task")
+            Self.logger.debug("Resolving whisper executable path")
             let executableURL = try ToolLocator.whisperCLIURL()
+            Self.logger.debug("Resolved whisper executable path to \(executableURL.path, privacy: .public)")
+            Self.logger.debug("Resolving whisper model path")
             let modelURL = try ToolLocator.modelURL()
+            Self.logger.debug("Resolved whisper model path to \(modelURL.path, privacy: .public)")
             let arguments = [
                 "--file", audioFileURL.path,
                 "--model", modelURL.path,
