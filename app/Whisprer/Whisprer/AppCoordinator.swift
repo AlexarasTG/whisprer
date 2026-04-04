@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import Foundation
 import OSLog
@@ -14,6 +15,8 @@ final class AppCoordinator: ObservableObject {
     private let textInsertionService = TextInsertionService()
     private let hotkeyManager = RightOptionHotkeyManager()
     private let logger = Logger(subsystem: "com.alexarasTG.Whisprer", category: "AppCoordinator")
+    private var cancellables = Set<AnyCancellable>()
+    private var isRequestingPermissions = false
 
     init() {
         permissions = permissionManager.snapshot()
@@ -25,17 +28,29 @@ final class AppCoordinator: ObservableObject {
             self?.handleHotkeyReleased()
         }
         hotkeyManager.startMonitoring()
+        NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+            .sink { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.handleApplicationDidBecomeActive()
+                }
+            }
+            .store(in: &cancellables)
+        NotificationCenter.default.publisher(for: NSApplication.didFinishLaunchingNotification)
+            .sink { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    await self?.handleApplicationDidFinishLaunching()
+                }
+            }
+            .store(in: &cancellables)
     }
 
     func requestPermissions() {
         logger.debug("Manual permission request triggered")
-        permissionManager.promptForAccessibilityAccess()
-
         Task {
-            _ = await permissionManager.requestMicrophoneAccess()
-            await MainActor.run {
-                self.refreshPermissions()
-                self.logger.debug("Permissions after manual request: \(Self.describe(permissions: self.permissions), privacy: .public)")
+            await requestMissingPermissions()
+
+            if !self.permissions.readyForEndToEndFlow {
+                self.setState(.error(self.permissionGuidanceMessage()))
             }
         }
     }
@@ -49,6 +64,17 @@ final class AppCoordinator: ObservableObject {
     func refreshPermissions() {
         permissions = permissionManager.snapshot()
         logger.debug("Permission snapshot refreshed: \(Self.describe(permissions: self.permissions), privacy: .public)")
+        handlePermissionStateChange()
+    }
+
+    private func handleApplicationDidFinishLaunching() async {
+        refreshPermissions()
+
+        guard !permissions.readyForEndToEndFlow else {
+            return
+        }
+
+        await requestMissingPermissions()
     }
 
     private func handleHotkeyPressed() {
@@ -84,13 +110,14 @@ final class AppCoordinator: ObservableObject {
             return
         }
 
-        switch await preparePermissionsForRecording() {
+        switch preparePermissionsForRecording() {
         case .ready:
             logger.debug("Permissions ready for recording")
             break
         case let .blocked(message):
             logger.debug("Recording blocked by permissions: \(message, privacy: .public)")
-            setState(.error(message))
+            await requestMissingPermissions()
+            setState(.error(postPermissionAttemptMessage(fallback: message)))
             return
         }
 
@@ -103,38 +130,56 @@ final class AppCoordinator: ObservableObject {
         }
     }
 
-    private func preparePermissionsForRecording() async -> PermissionPreparationResult {
-        let initialPermissions = permissions
-        let requestedAccessibility = !initialPermissions.accessibilityGranted
-        let requestedMicrophone = !initialPermissions.microphoneGranted
-
+    private func preparePermissionsForRecording() -> PermissionPreparationResult {
         logger.debug(
-            "Preparing permissions. Current snapshot: \(Self.describe(permissions: initialPermissions), privacy: .public)"
+            "Preparing permissions. Current snapshot: \(Self.describe(permissions: self.permissions), privacy: .public)"
         )
-
-        if requestedAccessibility {
-            logger.debug("Requesting accessibility permission")
-            permissionManager.promptForAccessibilityAccess()
-        }
-
-        if requestedMicrophone {
-            logger.debug("Requesting microphone permission")
-            _ = await permissionManager.requestMicrophoneAccess()
-        }
 
         refreshPermissions()
 
         guard permissions.readyForEndToEndFlow else {
-            logger.debug("Permissions still incomplete after request: \(Self.describe(permissions: self.permissions), privacy: .public)")
+            logger.debug("Permissions incomplete for recording: \(Self.describe(permissions: self.permissions), privacy: .public)")
             return .blocked(permissionGuidanceMessage())
         }
 
-        if requestedAccessibility || requestedMicrophone {
-            logger.debug("Permissions changed during this attempt; requiring a fresh hotkey press")
-            return .blocked("Permissions updated. Press Right Option again to start dictation.")
+        return .ready
+    }
+
+    private func requestMissingPermissions() async {
+        guard !isRequestingPermissions else {
+            logger.debug("Ignoring permission request because another permission flow is already active")
+            return
         }
 
-        return .ready
+        isRequestingPermissions = true
+        defer { isRequestingPermissions = false }
+
+        refreshPermissions()
+
+        if !permissions.microphoneGranted {
+            logger.debug("Requesting microphone permission")
+            _ = await permissionManager.requestMicrophoneAccess()
+            refreshPermissions()
+        }
+
+        guard permissions.microphoneGranted else {
+            logger.debug("Microphone permission is still missing after request")
+            return
+        }
+
+        if !permissions.accessibilityGranted {
+            logger.debug("Requesting accessibility permission")
+            permissionManager.promptForAccessibilityAccess()
+            refreshPermissions()
+        }
+    }
+
+    private func postPermissionAttemptMessage(fallback: String) -> String {
+        if permissions.readyForEndToEndFlow {
+            return "Permissions updated. Press Right Option again to start dictation."
+        }
+
+        return fallback
     }
 
     private func permissionGuidanceMessage() -> String {
@@ -188,6 +233,30 @@ final class AppCoordinator: ObservableObject {
     private func setState(_ newState: AppState) {
         logger.debug("State transition: \(Self.describe(state: self.state), privacy: .public) -> \(Self.describe(state: newState), privacy: .public)")
         state = newState
+    }
+
+    private func handleApplicationDidBecomeActive() {
+        logger.debug("Application became active; refreshing permissions")
+        refreshPermissions()
+    }
+
+    private func handlePermissionStateChange() {
+        if permissions.readyForEndToEndFlow {
+            if isPermissionError(state) {
+                setState(.idle)
+            }
+        }
+    }
+
+    private func isPermissionError(_ state: AppState) -> Bool {
+        guard case let .error(message) = state else {
+            return false
+        }
+
+        return message.hasPrefix("Grant accessibility")
+            || message.hasPrefix("Grant microphone")
+            || message.hasPrefix("Grant accessibility and microphone")
+            || message.hasPrefix("Permissions updated")
     }
 
     private static func describe(permissions: PermissionSnapshot) -> String {

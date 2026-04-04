@@ -15,21 +15,6 @@ struct MenuBarContentView: View {
 
             permissionSection
 
-            if !coordinator.lastTranscript.isEmpty {
-                Divider()
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Last Transcript")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    Text(coordinator.lastTranscript)
-                        .font(.callout)
-                        .lineLimit(4)
-                        .textSelection(.enabled)
-                }
-            }
-
             Divider()
 
             HStack {
