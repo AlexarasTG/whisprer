@@ -52,6 +52,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = FA4556472F70591B0077C5CD /* Build configuration list for PBXNativeTarget "Whisprer" */;
 			buildPhases = (
+				FA45564A2F70591B0077C5CD /* Bundle Whisper Runtime Assets */,
 				FA4556382F7059190077C5CD /* Sources */,
 				FA4556392F7059190077C5CD /* Frameworks */,
 				FA45563A2F7059190077C5CD /* Resources */,
@@ -103,6 +104,32 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		FA45564A2F70591B0077C5CD /* Bundle Whisper Runtime Assets */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(PROJECT_DIR)/scripts/copy_runtime_assets.sh",
+				"$(PROJECT_DIR)/../../tools/whisper-cli",
+				"$(PROJECT_DIR)/../../models/ggml-base.en.bin",
+			);
+			name = "Bundle Whisper Runtime Assets";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/WhisperRuntime/whisper-cli",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/WhisperRuntime/ggml-base.en.bin",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "/bin/sh \"${PROJECT_DIR}/scripts/copy_runtime_assets.sh\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXResourcesBuildPhase section */
 		FA45563A2F7059190077C5CD /* Resources */ = {
