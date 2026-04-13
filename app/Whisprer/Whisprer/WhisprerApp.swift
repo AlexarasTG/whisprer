@@ -23,7 +23,9 @@ struct WhisprerApp: App {
         MenuBarExtra {
             MenuBarContentView(coordinator: coordinator)
         } label: {
-            Label("Whisprer", systemImage: coordinator.state.menuBarIcon)
+            Image("MenuBarIcon")
+                .renderingMode(.template)
+                .accessibilityLabel("Whisprer")
         }
         .menuBarExtraStyle(.window)
     }
