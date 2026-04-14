@@ -32,6 +32,9 @@ struct MenuBarContentView: View {
         }
         .padding(14)
         .frame(width: 320)
+        .onAppear {
+            coordinator.handleMenuBarOpened()
+        }
     }
 
     private var headerSection: some View {

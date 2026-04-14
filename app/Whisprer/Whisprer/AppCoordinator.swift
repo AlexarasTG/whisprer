@@ -17,6 +17,7 @@ final class AppCoordinator: ObservableObject {
     private let logger = Logger(subsystem: "com.alexarasTG.Whisprer", category: "AppCoordinator")
     private var cancellables = Set<AnyCancellable>()
     private var isRequestingPermissions = false
+    private var accessibilityRefreshTask: Task<Void, Never>?
 
     init() {
         permissions = permissionManager.snapshot()
@@ -67,6 +68,15 @@ final class AppCoordinator: ObservableObject {
         handlePermissionStateChange()
     }
 
+    func handleMenuBarOpened() {
+        logger.debug("Menu bar opened; refreshing permissions")
+        refreshPermissions()
+
+        if !permissions.accessibilityGranted {
+            scheduleAccessibilityRefreshRetriesIfNeeded(reason: "menu open")
+        }
+    }
+
     private func handleApplicationDidFinishLaunching() async {
         refreshPermissions()
 
@@ -75,6 +85,7 @@ final class AppCoordinator: ObservableObject {
         }
 
         await requestMissingPermissions()
+        scheduleAccessibilityRefreshRetriesIfNeeded(reason: "launch")
     }
 
     private func handleHotkeyPressed() {
@@ -171,6 +182,7 @@ final class AppCoordinator: ObservableObject {
             logger.debug("Requesting accessibility permission")
             permissionManager.promptForAccessibilityAccess()
             refreshPermissions()
+            scheduleAccessibilityRefreshRetriesIfNeeded(reason: "accessibility prompt")
         }
     }
 
@@ -238,13 +250,55 @@ final class AppCoordinator: ObservableObject {
     private func handleApplicationDidBecomeActive() {
         logger.debug("Application became active; refreshing permissions")
         refreshPermissions()
+
+        if !permissions.accessibilityGranted {
+            scheduleAccessibilityRefreshRetriesIfNeeded(reason: "app activation")
+        }
     }
 
     private func handlePermissionStateChange() {
         if permissions.readyForEndToEndFlow {
+            accessibilityRefreshTask?.cancel()
+            accessibilityRefreshTask = nil
+
             if isPermissionError(state) {
                 setState(.idle)
             }
+        }
+    }
+
+    private func scheduleAccessibilityRefreshRetriesIfNeeded(reason: String) {
+        guard !permissions.accessibilityGranted else {
+            accessibilityRefreshTask?.cancel()
+            accessibilityRefreshTask = nil
+            return
+        }
+
+        accessibilityRefreshTask?.cancel()
+        accessibilityRefreshTask = Task { @MainActor [weak self] in
+            guard let self else {
+                return
+            }
+
+            for attempt in 1...10 {
+                try? await Task.sleep(nanoseconds: 500_000_000)
+
+                if Task.isCancelled {
+                    return
+                }
+
+                self.logger.debug("Retrying accessibility refresh (\(attempt)/10) after \(reason, privacy: .public)")
+                self.refreshPermissions()
+
+                if self.permissions.accessibilityGranted {
+                    self.logger.debug("Accessibility became available during retry window")
+                    self.accessibilityRefreshTask = nil
+                    return
+                }
+            }
+
+            self.logger.debug("Accessibility refresh retry window expired after \(reason, privacy: .public)")
+            self.accessibilityRefreshTask = nil
         }
     }
 
