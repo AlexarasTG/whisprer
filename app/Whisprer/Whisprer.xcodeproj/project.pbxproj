@@ -105,6 +105,16 @@
 		};
 /* End PBXProject section */
 
+/* Begin PBXResourcesBuildPhase section */
+		FA45563A2F7059190077C5CD /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
 /* Begin PBXShellScriptBuildPhase section */
 		FA45564A2F70591B0077C5CD /* Bundle Whisper Runtime Assets */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -130,16 +140,6 @@
 			shellScript = "/bin/sh \"${PROJECT_DIR}/scripts/copy_runtime_assets.sh\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
-
-/* Begin PBXResourcesBuildPhase section */
-		FA45563A2F7059190077C5CD /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		FA4556382F7059190077C5CD /* Sources */ = {
