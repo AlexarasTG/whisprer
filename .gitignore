@@ -63,6 +63,4 @@ tools/whisper-cli
 # -----------------------------------------------------------------------------
 # Project: Whisprer (Development process documentation)
 # -----------------------------------------------------------------------------
-project-whisprer.md
-.whisprer.env.local
-launch-whisprer-dev.sh
+docs

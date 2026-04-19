@@ -12,6 +12,7 @@ final class AppCoordinator: ObservableObject {
     private let permissionManager = PermissionManager()
     private let recorder = AudioRecorder()
     private let transcriptionEngine: TranscriptionEngine = WhisperCLIEngine()
+    private let transcriptPostProcessor = TranscriptPostProcessor()
     private let textInsertionService = TextInsertionService()
     private let hotkeyManager = RightOptionHotkeyManager()
     private let logger = Logger(subsystem: "com.alexarasTG.Whisprer", category: "AppCoordinator")
@@ -221,19 +222,28 @@ final class AppCoordinator: ObservableObject {
             logger.debug("Recorder returned audio file: \(audioFileURL.path, privacy: .public)")
             logger.debug("Invoking transcription engine")
             let transcript = try await transcriptionEngine.transcribe(audioFileURL: audioFileURL)
+            logger.debug("Raw transcript: \(transcript, privacy: .public)")
             let trimmedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-            logger.debug("Transcription completed. Character count=\(trimmedTranscript.count)")
+            let processedTranscript = transcriptPostProcessor
+                .process(trimmedTranscript)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            logger.debug("Processed transcript: \(processedTranscript, privacy: .public)")
+            logger.debug("Transcription completed. Character count=\(processedTranscript.count)")
 
-            guard !trimmedTranscript.isEmpty else {
+            guard !processedTranscript.isEmpty else {
                 logger.error("Transcript was empty after trimming")
                 setState(.error("No speech was detected in the recording."))
                 return
             }
 
-            lastTranscript = trimmedTranscript
+            if processedTranscript != trimmedTranscript {
+                logger.debug("Post-processing transformed the transcript")
+            }
+
+            lastTranscript = processedTranscript
             logger.debug("Starting text insertion")
             setState(.inserting)
-            try await textInsertionService.insert(text: trimmedTranscript)
+            try await textInsertionService.insert(text: processedTranscript)
             logger.debug("Text insertion completed")
             setState(.idle)
         } catch {
