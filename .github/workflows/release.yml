@@ -14,10 +14,11 @@ on:
           - patch
 
 jobs:
-  release:
+  prepare-release:
     runs-on: macos-latest
     permissions:
       contents: write
+      pull-requests: write
 
     steps:
       - name: Check out repository
@@ -39,7 +40,6 @@ jobs:
         run: |
           set -a
           . scripts/release/release.env
-          . scripts/release/runtime.env
           set +a
 
           if [ "${GITHUB_REF_TYPE}" != "branch" ]; then
@@ -47,18 +47,26 @@ jobs:
             exit 1
           fi
 
+          DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
+          if [ "${GITHUB_REF_NAME}" != "${DEFAULT_BRANCH}" ]; then
+            echo "Release workflow must be run from ${DEFAULT_BRANCH}." >&2
+            exit 1
+          fi
+
           chmod +x scripts/release/get_next_version.sh scripts/release/update_xcode_version.sh
           VERSION="$(scripts/release/get_next_version.sh "${{ inputs.version_bump }}" "${APP_PROJECT_FILE}")"
           TAG_NAME="v${VERSION}"
-          ARTIFACT_NAME="${APP_NAME}-${VERSION}-${RELEASE_ARCH}-${RELEASE_FILE_SUFFIX}.zip"
+          RELEASE_BRANCH="release/${TAG_NAME}"
 
           {
             echo "VERSION=${VERSION}"
             echo "TAG_NAME=${TAG_NAME}"
-            echo "ARTIFACT_NAME=${ARTIFACT_NAME}"
+            echo "RELEASE_BRANCH=${RELEASE_BRANCH}"
           } >> "${GITHUB_ENV}"
 
-      - name: Commit release version and create local tag
+      - name: Create release branch and pull request
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -a
           . scripts/release/release.env
@@ -71,77 +79,29 @@ jobs:
             exit 1
           fi
 
-          if git rev-parse "${TAG_NAME}" >/dev/null 2>&1; then
-            echo "Tag ${TAG_NAME} already exists locally." >&2
-            exit 1
-          fi
-
           if git ls-remote --exit-code --tags origin "${TAG_NAME}" >/dev/null 2>&1; then
             echo "Tag ${TAG_NAME} already exists on origin." >&2
             exit 1
           fi
 
+          if git ls-remote --exit-code --heads origin "${RELEASE_BRANCH}" >/dev/null 2>&1; then
+            echo "Release branch ${RELEASE_BRANCH} already exists on origin." >&2
+            exit 1
+          fi
+
+          if [ -n "$(gh pr list --head "${RELEASE_BRANCH}" --json number --jq '.[0].number')" ]; then
+            echo "A pull request for ${RELEASE_BRANCH} already exists." >&2
+            exit 1
+          fi
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "${RELEASE_BRANCH}"
           git add "${APP_PROJECT_FILE}"
           git commit -m "Release ${TAG_NAME}"
-          git tag -a "${TAG_NAME}" -m "Release ${TAG_NAME}"
-
-      - name: Prepare bundled runtime assets
-        run: |
-          scripts/release/prepare_runtime_assets.sh \
-            "${GITHUB_WORKSPACE}/.release/runtime" \
-            "${GITHUB_WORKSPACE}/.release/work"
-
-      - name: Build Whisprer.app
-        run: |
-          xcodebuild \
-            -project app/Whisprer/Whisprer.xcodeproj \
-            -scheme Whisprer \
-            -configuration Release \
-            -destination 'platform=macOS' \
-            -derivedDataPath .deriveddata-release \
-            CODE_SIGNING_ALLOWED=NO \
-            ARCHS=arm64 \
-            ONLY_ACTIVE_ARCH=NO \
-            CURRENT_PROJECT_VERSION="${VERSION}" \
-            MARKETING_VERSION="${VERSION}" \
-            WHISPRER_RUNTIME_CLI_PATH="${GITHUB_WORKSPACE}/.release/runtime/whisper-cli" \
-            WHISPRER_RUNTIME_MODEL_PATH="${GITHUB_WORKSPACE}/.release/runtime/ggml-base.en.bin" \
-            WHISPRER_REQUIRE_RUNTIME_ASSETS=YES \
-            build
-
-      - name: Prepare app bundle contents
-        run: |
-          APP_PATH="${GITHUB_WORKSPACE}/.deriveddata-release/Build/Products/Release/Whisprer.app"
-          mkdir -p "${APP_PATH}/Contents/Resources"
-          cp THIRD_PARTY_NOTICES.md "${APP_PATH}/Contents/Resources/THIRD_PARTY_NOTICES.md"
-
-      - name: Archive release artifact
-        run: |
-          APP_PATH="${GITHUB_WORKSPACE}/.deriveddata-release/Build/Products/Release/Whisprer.app"
-          mkdir -p "${GITHUB_WORKSPACE}/.release/artifacts"
-          ditto -c -k --keepParent "${APP_PATH}" "${GITHUB_WORKSPACE}/.release/artifacts/${ARTIFACT_NAME}"
-          shasum -a 256 "${GITHUB_WORKSPACE}/.release/artifacts/${ARTIFACT_NAME}" > "${GITHUB_WORKSPACE}/.release/artifacts/${ARTIFACT_NAME}.sha256"
-
-      - name: Push release commit and tag
-        run: |
-          git push origin "HEAD:${GITHUB_REF_NAME}"
-          git push origin "${TAG_NAME}"
-
-      - name: Publish GitHub release
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          if gh release view "${TAG_NAME}" >/dev/null 2>&1; then
-            gh release upload "${TAG_NAME}" \
-              "${GITHUB_WORKSPACE}/.release/artifacts/${ARTIFACT_NAME}" \
-              "${GITHUB_WORKSPACE}/.release/artifacts/${ARTIFACT_NAME}.sha256" \
-              --clobber
-          else
-            gh release create "${TAG_NAME}" \
-              "${GITHUB_WORKSPACE}/.release/artifacts/${ARTIFACT_NAME}" \
-              "${GITHUB_WORKSPACE}/.release/artifacts/${ARTIFACT_NAME}.sha256" \
-              --title "${TAG_NAME}" \
-              --generate-notes
-          fi
+          git push origin "HEAD:${RELEASE_BRANCH}"
+          gh pr create \
+            --base "${GITHUB_REF_NAME}" \
+            --head "${RELEASE_BRANCH}" \
+            --title "Release ${TAG_NAME}" \
+            --body "Automated release PR for ${TAG_NAME}. Merge this PR to publish the GitHub Release artifact."

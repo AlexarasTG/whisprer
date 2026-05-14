@@ -1,0 +1,116 @@
+name: Publish Release
+
+on:
+  pull_request:
+    types:
+      - closed
+    branches:
+      - main
+
+jobs:
+  publish-release:
+    if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release/v')
+    runs-on: macos-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out merge commit
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Load release configuration
+        run: |
+          set -a
+          . scripts/release/release.env
+          . scripts/release/runtime.env
+          set +a
+
+          chmod +x scripts/release/get_current_version.sh
+          VERSION="$(scripts/release/get_current_version.sh "${APP_PROJECT_FILE}")"
+          TAG_NAME="v${VERSION}"
+          ARTIFACT_NAME="${APP_NAME}-${VERSION}-${RELEASE_ARCH}-${RELEASE_FILE_SUFFIX}.zip"
+
+          {
+            echo "VERSION=${VERSION}"
+            echo "TAG_NAME=${TAG_NAME}"
+            echo "ARTIFACT_NAME=${ARTIFACT_NAME}"
+          } >> "${GITHUB_ENV}"
+
+      - name: Prepare bundled runtime assets
+        run: |
+          scripts/release/prepare_runtime_assets.sh \
+            "${GITHUB_WORKSPACE}/.release/runtime" \
+            "${GITHUB_WORKSPACE}/.release/work"
+
+      - name: Build Whisprer.app
+        run: |
+          xcodebuild \
+            -project app/Whisprer/Whisprer.xcodeproj \
+            -scheme Whisprer \
+            -configuration Release \
+            -destination 'platform=macOS' \
+            -derivedDataPath .deriveddata-release \
+            CODE_SIGNING_ALLOWED=NO \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=NO \
+            CURRENT_PROJECT_VERSION="${VERSION}" \
+            MARKETING_VERSION="${VERSION}" \
+            WHISPRER_RUNTIME_CLI_PATH="${GITHUB_WORKSPACE}/.release/runtime/whisper-cli" \
+            WHISPRER_RUNTIME_MODEL_PATH="${GITHUB_WORKSPACE}/.release/runtime/ggml-base.en.bin" \
+            WHISPRER_REQUIRE_RUNTIME_ASSETS=YES \
+            build
+
+      - name: Prepare app bundle contents
+        run: |
+          APP_PATH="${GITHUB_WORKSPACE}/.deriveddata-release/Build/Products/Release/Whisprer.app"
+          mkdir -p "${APP_PATH}/Contents/Resources"
+          cp THIRD_PARTY_NOTICES.md "${APP_PATH}/Contents/Resources/THIRD_PARTY_NOTICES.md"
+
+      - name: Archive release artifact
+        run: |
+          APP_PATH="${GITHUB_WORKSPACE}/.deriveddata-release/Build/Products/Release/Whisprer.app"
+          mkdir -p "${GITHUB_WORKSPACE}/.release/artifacts"
+          ditto -c -k --keepParent "${APP_PATH}" "${GITHUB_WORKSPACE}/.release/artifacts/${ARTIFACT_NAME}"
+          shasum -a 256 "${GITHUB_WORKSPACE}/.release/artifacts/${ARTIFACT_NAME}" > "${GITHUB_WORKSPACE}/.release/artifacts/${ARTIFACT_NAME}.sha256"
+
+      - name: Create and push release tag
+        run: |
+          if git ls-remote --exit-code --tags origin "${TAG_NAME}" >/dev/null 2>&1; then
+            echo "Tag ${TAG_NAME} already exists on origin."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${TAG_NAME}" -m "Release ${TAG_NAME}"
+          git push origin "${TAG_NAME}"
+
+      - name: Publish GitHub release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${TAG_NAME}" >/dev/null 2>&1; then
+            gh release upload "${TAG_NAME}" \
+              "${GITHUB_WORKSPACE}/.release/artifacts/${ARTIFACT_NAME}" \
+              "${GITHUB_WORKSPACE}/.release/artifacts/${ARTIFACT_NAME}.sha256" \
+              --clobber
+          else
+            gh release create "${TAG_NAME}" \
+              "${GITHUB_WORKSPACE}/.release/artifacts/${ARTIFACT_NAME}" \
+              "${GITHUB_WORKSPACE}/.release/artifacts/${ARTIFACT_NAME}.sha256" \
+              --title "${TAG_NAME}" \
+              --generate-notes
+          fi
