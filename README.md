@@ -10,7 +10,7 @@ Core loop:
 
 ## Install
 
-Download the latest packaged release from GitHub Releases, unzip it, and move `Whisprer.app` into `/Applications`.
+Download the latest `.dmg` from GitHub Releases, open it, and drag `Whisprer.app` into `/Applications`.
 
 The packaged release is:
 

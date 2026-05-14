@@ -41,7 +41,7 @@ jobs:
           chmod +x scripts/release/get_current_version.sh
           VERSION="$(scripts/release/get_current_version.sh "${APP_PROJECT_FILE}")"
           TAG_NAME="v${VERSION}"
-          ARTIFACT_NAME="${APP_NAME}-${VERSION}-${RELEASE_ARCH}-${RELEASE_FILE_SUFFIX}.zip"
+          ARTIFACT_NAME="${APP_NAME}-${VERSION}-${RELEASE_ARCH}-${RELEASE_FILE_SUFFIX}.dmg"
 
           {
             echo "VERSION=${VERSION}"
@@ -79,11 +79,21 @@ jobs:
           mkdir -p "${APP_PATH}/Contents/Resources"
           cp THIRD_PARTY_NOTICES.md "${APP_PATH}/Contents/Resources/THIRD_PARTY_NOTICES.md"
 
-      - name: Archive release artifact
+      - name: Create disk image
         run: |
           APP_PATH="${GITHUB_WORKSPACE}/.deriveddata-release/Build/Products/Release/Whisprer.app"
+          DMG_STAGING_DIR="${GITHUB_WORKSPACE}/.release/dmg"
           mkdir -p "${GITHUB_WORKSPACE}/.release/artifacts"
-          ditto -c -k --keepParent "${APP_PATH}" "${GITHUB_WORKSPACE}/.release/artifacts/${ARTIFACT_NAME}"
+          rm -rf "${DMG_STAGING_DIR}"
+          mkdir -p "${DMG_STAGING_DIR}"
+          cp -R "${APP_PATH}" "${DMG_STAGING_DIR}/"
+          ln -s /Applications "${DMG_STAGING_DIR}/Applications"
+          hdiutil create \
+            -volname "${APP_NAME} ${VERSION}" \
+            -srcfolder "${DMG_STAGING_DIR}" \
+            -ov \
+            -format UDZO \
+            "${GITHUB_WORKSPACE}/.release/artifacts/${ARTIFACT_NAME}"
           shasum -a 256 "${GITHUB_WORKSPACE}/.release/artifacts/${ARTIFACT_NAME}" > "${GITHUB_WORKSPACE}/.release/artifacts/${ARTIFACT_NAME}.sha256"
 
       - name: Create and push release tag
