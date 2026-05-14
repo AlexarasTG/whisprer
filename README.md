@@ -8,6 +8,16 @@ Core loop:
 
 > Hold `Right Option` → speak → release → text appears
 
+## Install
+
+Download the latest packaged release from GitHub Releases, unzip it, and move `Whisprer.app` into `/Applications`.
+
+The packaged release is:
+
+- Apple Silicon only
+- fully self-contained, with `whisper-cli` and the `base.en` model bundled inside the app
+- offline after install, simply plug-n-play
+
 ## Why
 
 I found myself dictating my prompts more and more often when working with LLMs, since more context -> less iterations and more accurate results. I looked for trustworthy dictating apps and all of them were either paid and/or they didn't have that developer focus I needed. 
@@ -34,3 +44,13 @@ Whisprer needs:
 
 - microphone permission for recording
 - accessibility permission for text insertion
+
+On first launch, macOS will also warn that the app is from an unidentified developer because it is not notarized.
+
+If that happens:
+
+1. Try opening the app once from `/Applications`
+2. Open `System Settings -> Privacy & Security`
+3. Click `Open Anyway` for Whisprer
+
+After that, the app can be launched normally and macOS will prompt for the native microphone and accessibility permissions.

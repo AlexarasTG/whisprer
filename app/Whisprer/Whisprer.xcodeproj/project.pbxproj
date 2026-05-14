@@ -125,8 +125,8 @@
 			);
 			inputPaths = (
 				"$(PROJECT_DIR)/scripts/copy_runtime_assets.sh",
-				"$(PROJECT_DIR)/../../tools/whisper-cli",
-				"$(PROJECT_DIR)/../../models/ggml-base.en.bin",
+				"$(WHISPRER_RUNTIME_CLI_PATH)",
+				"$(WHISPRER_RUNTIME_MODEL_PATH)",
 			);
 			name = "Bundle Whisper Runtime Assets";
 			outputFileListPaths = (
@@ -272,7 +272,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 0.0.0;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
@@ -293,7 +293,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.2;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 0.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.alexarasTG.Whisprer;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -305,6 +305,9 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
+				WHISPRER_REQUIRE_RUNTIME_ASSETS = NO;
+				WHISPRER_RUNTIME_CLI_PATH = "$(PROJECT_DIR)/../../tools/whisper-cli";
+				WHISPRER_RUNTIME_MODEL_PATH = "$(PROJECT_DIR)/../../models/ggml-base.en.bin";
 			};
 			name = Debug;
 		};
@@ -314,7 +317,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 0.0.0;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
@@ -335,7 +338,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.2;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 0.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.alexarasTG.Whisprer;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -347,6 +350,9 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
+				WHISPRER_REQUIRE_RUNTIME_ASSETS = NO;
+				WHISPRER_RUNTIME_CLI_PATH = "$(PROJECT_DIR)/../../tools/whisper-cli";
+				WHISPRER_RUNTIME_MODEL_PATH = "$(PROJECT_DIR)/../../models/ggml-base.en.bin";
 			};
 			name = Release;
 		};
