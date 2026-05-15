@@ -79,6 +79,12 @@ jobs:
           mkdir -p "${APP_PATH}/Contents/Resources"
           cp THIRD_PARTY_NOTICES.md "${APP_PATH}/Contents/Resources/THIRD_PARTY_NOTICES.md"
 
+      - name: Re-sign final app bundle
+        run: |
+          APP_PATH="${GITHUB_WORKSPACE}/.deriveddata-release/Build/Products/Release/Whisprer.app"
+          codesign --force --deep --sign - "${APP_PATH}"
+          codesign --verify --deep --strict --verbose=2 "${APP_PATH}"
+
       - name: Create disk image
         run: |
           APP_PATH="${GITHUB_WORKSPACE}/.deriveddata-release/Build/Products/Release/Whisprer.app"
