@@ -36,7 +36,10 @@ python3 -m venv "${PYTHON_VENV_DIR}"
 "${PYTHON_VENV_DIR}/bin/pip" install --upgrade pip
 "${PYTHON_VENV_DIR}/bin/pip" install numpy torch
 
-cmake -S "${WHISPER_CPP_DIR}" -B "${WHISPER_CPP_DIR}/build"
+cmake \
+  -S "${WHISPER_CPP_DIR}" \
+  -B "${WHISPER_CPP_DIR}/build" \
+  -DBUILD_SHARED_LIBS=OFF
 cmake --build "${WHISPER_CPP_DIR}/build" --config Release --target whisper-cli
 
 mkdir -p "${MODEL_OUTPUT_DIR}"
@@ -64,6 +67,12 @@ fi
 cp -f "${WHISPER_CLI_CANDIDATE}" "${DEST_DIR}/whisper-cli"
 cp -f "${MODEL_OUTPUT_DIR}/ggml-model.bin" "${DEST_DIR}/ggml-base.en.bin"
 chmod +x "${DEST_DIR}/whisper-cli"
+
+if otool -L "${DEST_DIR}/whisper-cli" | rg -q '@rpath/lib(whisper|ggml)'; then
+  echo "whisper-cli still depends on packaged libwhisper/libggml dylibs; release build is not self-contained." >&2
+  otool -L "${DEST_DIR}/whisper-cli" >&2
+  exit 1
+fi
 
 (
   cd "${DEST_DIR}"
