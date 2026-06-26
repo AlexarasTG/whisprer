@@ -219,6 +219,7 @@ final class AppCoordinator: ObservableObject {
 
         do {
             let audioFileURL = try await recorder.stopRecording()
+            defer { deleteTemporaryRecording(at: audioFileURL) }
             logger.debug("Recorder returned audio file: \(audioFileURL.path, privacy: .public)")
             logger.debug("Invoking transcription engine")
             let transcript = try await transcriptionEngine.transcribe(audioFileURL: audioFileURL)
@@ -249,6 +250,15 @@ final class AppCoordinator: ObservableObject {
         } catch {
             logger.error("End-to-end flow failed: \(error.localizedDescription, privacy: .public)")
             setState(.error(error.localizedDescription))
+        }
+    }
+
+    private func deleteTemporaryRecording(at audioFileURL: URL) {
+        do {
+            try FileManager.default.removeItem(at: audioFileURL)
+            logger.debug("Deleted temporary recording at \(audioFileURL.path, privacy: .public)")
+        } catch {
+            logger.error("Failed to delete temporary recording at \(audioFileURL.path, privacy: .public): \(error.localizedDescription, privacy: .public)")
         }
     }
 
