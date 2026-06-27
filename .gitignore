@@ -64,3 +64,4 @@ tools/whisper-cli
 # Project: Whisprer (Development process documentation)
 # -----------------------------------------------------------------------------
 docs
+.claude/
